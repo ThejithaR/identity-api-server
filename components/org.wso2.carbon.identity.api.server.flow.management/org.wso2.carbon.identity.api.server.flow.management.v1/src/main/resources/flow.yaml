@@ -737,6 +737,8 @@ components:
           example: EXECUTOR
         executor:
           $ref: '#/components/schemas/Executor'
+        conditions:
+          $ref: '#/components/schemas/Conditions'
         next:
           type: string
           description: ID of the next step. For the last step, value will be "COMPLETE"
@@ -757,6 +759,70 @@ components:
           description: Contains metadata related to the executor
           example:
             idp: google1
+
+    Conditions:
+      type: array
+      description: Each condition in a array as if, else-if, ... , else
+      items:
+        $ref: '#/components/schemas/Condition'
+
+    Condition:
+      type: object
+      description: A single condition
+      properties:
+        id:
+          type: string
+          description: A unique id
+          example: cond_1
+        rule:
+          $ref: '#/components/schemas/OuterRule'
+        next:
+          type: string
+          description: if true go to
+          example: dnd-step-3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+    OuterRule:
+      type: object
+      description: The rule for branching (Evaluates through rule engine)
+      properties:
+        condition:
+          type: string
+          description: Outer Condition that bounds each inner Rule
+          example: OR
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/InnerRule'
+
+    InnerRule:
+      type: object
+      description: Each binary rule combined by the outer Condition
+      properties:
+        condition:
+          type: string
+          description: Condition that bounds each expression
+          example: AND
+        expressions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Expression'
+
+    Expression:
+      type: object
+      description: Each binary expression
+      properties:
+        field:
+          type: string
+          description: Left hand side of the expression
+          example: properties.impossible-travel-score
+        operator:
+          type: string
+          description: e,gte,lte,gt,lt,ne,cr,or,c,nc
+          example: greater-than-or-equal
+        value:
+          type: string
+          description: Right hand side of the expression
+          example: properties.impossible-travel-risk-margin
 
     Size:
       type: object

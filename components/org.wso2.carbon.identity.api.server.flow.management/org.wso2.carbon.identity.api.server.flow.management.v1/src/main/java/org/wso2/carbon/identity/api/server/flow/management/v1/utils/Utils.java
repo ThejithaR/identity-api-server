@@ -30,15 +30,7 @@ import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.api.server.common.error.APIError;
 import org.wso2.carbon.identity.api.server.common.error.ErrorDTO;
 import org.wso2.carbon.identity.api.server.flow.management.common.FlowMgtServiceHolder;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Action;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Component;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Data;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Executor;
-import org.wso2.carbon.identity.api.server.flow.management.v1.FlowConfig;
-import org.wso2.carbon.identity.api.server.flow.management.v1.FlowConfigPatchModel;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Position;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Size;
-import org.wso2.carbon.identity.api.server.flow.management.v1.Step;
+import org.wso2.carbon.identity.api.server.flow.management.v1.*;
 import org.wso2.carbon.identity.api.server.flow.management.v1.constants.FlowEndpointConstants;
 import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.AbstractMetaResponseHandler;
 import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.PasswordRecoveryFlowMetaHandler;
@@ -47,15 +39,11 @@ import org.wso2.carbon.identity.core.util.LambdaExceptionUtils;
 import org.wso2.carbon.identity.flow.mgt.Constants;
 import org.wso2.carbon.identity.flow.mgt.exception.FlowMgtClientException;
 import org.wso2.carbon.identity.flow.mgt.exception.FlowMgtFrameworkException;
-import org.wso2.carbon.identity.flow.mgt.model.ActionDTO;
-import org.wso2.carbon.identity.flow.mgt.model.ComponentDTO;
-import org.wso2.carbon.identity.flow.mgt.model.DataDTO;
-import org.wso2.carbon.identity.flow.mgt.model.ExecutorDTO;
-import org.wso2.carbon.identity.flow.mgt.model.FlowConfigDTO;
-import org.wso2.carbon.identity.flow.mgt.model.StepDTO;
+import org.wso2.carbon.identity.flow.mgt.model.*;
 import org.wso2.carbon.identity.governance.IdentityGovernanceException;
 import org.wso2.carbon.identity.governance.IdentityGovernanceService;
 import org.wso2.carbon.identity.multi.attribute.login.constants.MultiAttributeLoginConstants;
+import org.wso2.carbon.identity.rule.management.api.exception.RuleManagementException;
 import org.wso2.carbon.identity.workflow.mgt.WorkflowManagementService;
 import org.wso2.carbon.identity.workflow.mgt.dto.Association;
 import org.wso2.carbon.identity.workflow.mgt.exception.WorkflowException;
@@ -232,8 +220,31 @@ public class Utils {
         return new Action()
                 .type(actionDTO.getType())
                 .next(actionDTO.getNextId())
+                .conditions(convertToConditions(actionDTO.getConditions()))
                 .executor(convertToExecutor(actionDTO.getExecutor()));
     }
+
+    private static ArrayList<Condition>  convertToConditions(ArrayList<ConditionDTO> conditionDTOs) {
+
+        if (conditionDTOs == null) {
+            return null;
+        }
+        ArrayList<Condition> conditions = new ArrayList<>();
+        for (ConditionDTO conditionDTO : conditionDTOs) {
+            Condition condition = new Condition()
+                    .id(conditionDTO.getId())
+                    .rule(convertToRule(conditionDTO))
+                    .next(conditionDTO.getNext());
+            conditions.add(condition);
+        }
+        return conditions;
+    }
+
+    private static OuterRule convertToRule(ConditionDTO conditionDTO) {
+
+        return new OuterRule();
+    }
+
 
     private static Executor convertToExecutor(ExecutorDTO executorDTO) {
 
@@ -307,8 +318,37 @@ public class Utils {
         return new ActionDTO.Builder()
                 .type(action.getType())
                 .nextId(action.getNext())
+                .conditions(convertToConditionDTOs(action.getConditions()))
                 .executor(convertToExecutorDTO(action.getExecutor()))
                 .build();
+    }
+
+    private static ArrayList<ConditionDTO> convertToConditionDTOs(List<Condition> conditions) {
+
+        if (conditions == null) {
+            return null;
+        }
+        ArrayList<ConditionDTO> conditionDTOs = new ArrayList<>();
+        for (Condition condition : conditions) {
+            try {
+                ConditionDTO conditionDTO = new ConditionDTO.Builder()
+                        .id(condition.getId())
+                        .rule(convertToRuleDTO(condition))
+                        .next(condition.getNext())
+                        .build();
+                conditionDTOs.add(conditionDTO);
+            } catch (RuleManagementException e) {
+                // TODO: Add proper error code for rule management exceptions
+                throw new RuntimeException("Error while processing condition rule", e);
+            }
+        }
+        return conditionDTOs;
+    }
+
+    private static ConditionRule convertToRuleDTO(Condition condition) {
+
+        // TODO: Implement rule conversion for conditional branching
+        return null;
     }
 
     private static ExecutorDTO convertToExecutorDTO(Executor executor) {
