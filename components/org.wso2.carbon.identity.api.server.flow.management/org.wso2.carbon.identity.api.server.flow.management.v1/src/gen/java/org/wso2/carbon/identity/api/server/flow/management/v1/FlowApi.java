@@ -236,6 +236,32 @@ public class FlowApi {
     }
 
     @Valid
+    @GET
+    @Path("/meta/context")
+
+    @Produces({"application/json"})
+    @ApiOperation(value = "Retrieve the flow execution context metadata tree", notes = "Returns the hierarchical " +
+            "structure of the flow execution context, annotated with data types, allowed operations, and behavioral " +
+            "flags.", response = Void.class, authorizations = {
+            @Authorization(value = "BasicAuth"),
+            @Authorization(value = "OAuth2", scopes = {
+
+            })
+    }, tags = {"Flow Composer",})
+    @ApiResponses(value = {
+            @ApiResponse(code = 200, message = "Successfully retrieved the flow context metadata tree", response = Void.class),
+            @ApiResponse(code = 400, message = "Invalid flow type specified", response = Error.class),
+            @ApiResponse(code = 401, message = "Unauthorized", response = Error.class),
+            @ApiResponse(code = 403, message = "Forbidden", response = Error.class),
+            @ApiResponse(code = 500, message = "Encountered a server error", response = Error.class)
+    })
+    public Response getFlowContextMetadata(@Valid @ApiParam(value = "Optional flow type to filter claims and apply " +
+            "restrictions", allowableValues = "REGISTRATION, PASSWORD_RECOVERY, INVITED_USER_REGISTRATION") @QueryParam("flowType") String flowType) {
+
+        return delegate.getFlowContextMetadata(flowType);
+    }
+
+    @Valid
     @PUT
 
     @Consumes({"application/json"})

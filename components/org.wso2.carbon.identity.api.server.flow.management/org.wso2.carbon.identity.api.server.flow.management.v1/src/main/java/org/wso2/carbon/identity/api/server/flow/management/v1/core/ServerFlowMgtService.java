@@ -30,6 +30,9 @@ import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.
 import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.PasswordRecoveryFlowMetaHandler;
 import org.wso2.carbon.identity.api.server.flow.management.v1.response.handlers.RegistrationFlowMetaHandler;
 import org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils;
+import org.wso2.carbon.identity.flow.execution.engine.exception.FlowEngineServerException;
+import org.wso2.carbon.identity.flow.execution.engine.inflow.extension.metadata.FlowContextMetadataBuilder;
+import org.wso2.carbon.identity.flow.execution.engine.inflow.extension.metadata.FlowContextMetadataResponse;
 import org.wso2.carbon.identity.flow.mgt.Constants;
 import org.wso2.carbon.identity.flow.mgt.FlowMgtService;
 import org.wso2.carbon.identity.flow.mgt.exception.FlowMgtFrameworkException;
@@ -41,6 +44,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import javax.ws.rs.core.Response;
 
 import static org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils.collectFlowData;
 import static org.wso2.carbon.identity.api.server.flow.management.v1.utils.Utils.validateExecutors;
@@ -94,6 +99,23 @@ public class ServerFlowMgtService {
         Utils.validateFlowType(flowType);
         AbstractMetaResponseHandler metaResponseHandler = resolveHandler(flowType);
         return metaResponseHandler.createResponse();
+    }
+
+    /**
+     * Retrieve the flow execution context metadata tree.
+     *
+     * @param flowType Optional flow type for profile-filtered claims and restrictions.
+     * @return FlowContextMetadataResponse containing the context tree.
+     */
+    public FlowContextMetadataResponse getFlowContextMetadata(String flowType) {
+
+        try {
+            String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+            return FlowContextMetadataBuilder.buildContextTree(flowType, tenantDomain);
+        } catch (FlowEngineServerException e) {
+            throw Utils.handleException(Response.Status.INTERNAL_SERVER_ERROR,
+                    e.getErrorCode(), e.getMessage(), e.getDescription());
+        }
     }
 
     /**

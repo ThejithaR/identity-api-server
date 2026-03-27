@@ -207,6 +207,59 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /flow/meta/context:
+    get:
+      summary: Retrieve the flow execution context metadata tree
+      description: >
+        Returns the hierarchical structure of the flow execution context,
+        annotated with data types, allowed operations, and behavioral flags.
+        Optionally filters claims and applies restrictions based on the flow type.
+      operationId: getFlowContextMetadata
+      tags:
+        - Flow Composer
+      parameters:
+        - in: query
+          name: flowType
+          required: false
+          schema:
+            type: string
+            enum: [REGISTRATION, PASSWORD_RECOVERY, INVITED_USER_REGISTRATION]
+          description: >
+            Optional flow type to filter claims by attribute profile and apply
+            flow-specific restrictions. If omitted, all local claims are returned
+            with no restrictions applied.
+      responses:
+        '200':
+          description: Successfully retrieved the flow context metadata tree
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlowContextMetadataResponse'
+        '400':
+          description: Invalid flow type specified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Encountered a server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /flow/configs:
     get:
       summary: Retrieve flow management configuration
@@ -785,6 +838,76 @@ components:
         y:
           type: number
           example: 200.22
+
+    FlowContextMetadataResponse:
+      type: object
+      description: Response containing the flow execution context metadata tree
+      properties:
+        contextTree:
+          type: array
+          description: The hierarchical tree of context nodes
+          items:
+            $ref: '#/components/schemas/ContextTreeNode'
+        flowType:
+          type: string
+          description: The flow type used for filtering (null if not specified)
+          example: REGISTRATION
+        claimDialect:
+          type: string
+          description: The claim dialect URI used for claim resolution
+          example: http://wso2.org/claims
+
+    ContextTreeNode:
+      type: object
+      description: A node in the flow execution context metadata tree
+      properties:
+        key:
+          type: string
+          description: Unique identifier for the node
+          example: user
+        title:
+          type: string
+          description: Display title for the node
+          example: user
+        path:
+          type: string
+          description: The hierarchical path in the context (matches HierarchicalPrefixMatcher paths)
+          example: /user/
+        dataType:
+          type: string
+          description: The data type of the node value
+          example: FlowUser
+        nodeType:
+          type: string
+          description: The structural type of the node
+          enum: [OBJECT, MAP, COMPLEX_MAP, LEAF]
+        allowedOperations:
+          type: array
+          description: Operations allowed on this node
+          items:
+            type: string
+            enum: [EXPOSE, ADD, REPLACE, REMOVE]
+        readOnly:
+          type: boolean
+          description: Whether this node is read-only
+        replaceable:
+          type: boolean
+          description: Whether this node value can be replaced
+        canDelete:
+          type: boolean
+          description: Whether this node can be deleted
+        dynamicEntryAllowed:
+          type: boolean
+          description: Whether dynamic child entries can be added to this map node
+        dynamicEntryType:
+          type: string
+          description: The data type of dynamically added entries
+          example: String
+        children:
+          type: array
+          description: Child nodes in the tree hierarchy
+          items:
+            $ref: '#/components/schemas/ContextTreeNode'
 
     Error:
       type: object

@@ -112,6 +112,12 @@ public class FlowApiServiceImpl implements FlowApiService {
     }
 
     @Override
+    public Response getFlowContextMetadata(String flowType) {
+
+        return Response.ok().entity(flowMgtService.getFlowContextMetadata(flowType)).build();
+    }
+
+    @Override
     public Response updateFlow(FlowRequest flowRequest) {
 
         flowMgtService.updateFlow(flowRequest);
