@@ -18,9 +18,6 @@
 
 package org.wso2.carbon.identity.api.server.application.management.v1.core;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.ArrayUtils;
@@ -91,6 +88,13 @@ import org.wso2.carbon.identity.api.server.application.management.v1.factories.S
 import org.wso2.carbon.identity.api.server.common.ContextLoader;
 import org.wso2.carbon.identity.api.server.common.Util;
 import org.wso2.carbon.identity.api.server.common.error.APIError;
+import org.wso2.carbon.identity.api.server.common.file.FileContent;
+import org.wso2.carbon.identity.api.server.common.file.FileSerializationConfig;
+import org.wso2.carbon.identity.api.server.common.file.FileSerializationException;
+import org.wso2.carbon.identity.api.server.common.file.FileSerializationUtil;
+import org.wso2.carbon.identity.api.server.common.file.JsonConfig;
+import org.wso2.carbon.identity.api.server.common.file.XmlConfig;
+import org.wso2.carbon.identity.api.server.common.file.YamlConfig;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants.StandardInboundProtocols;
 import org.wso2.carbon.identity.application.common.IdentityApplicationManagementClientException;
@@ -147,19 +151,10 @@ import org.wso2.carbon.identity.template.mgt.exception.TemplateManagementExcepti
 import org.wso2.carbon.identity.template.mgt.model.Template;
 import org.wso2.carbon.user.core.common.AbstractUserStoreManager;
 import org.wso2.carbon.user.core.service.RealmService;
-import org.yaml.snakeyaml.DumperOptions;
-import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.TypeDescription;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
-import org.yaml.snakeyaml.error.YAMLException;
-import org.yaml.snakeyaml.inspector.TagInspector;
-import org.yaml.snakeyaml.inspector.TrustedPrefixesTagInspector;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -179,16 +174,14 @@ import java.util.stream.Stream;
 
 import javax.activation.MimeType;
 import javax.activation.MimeTypeParseException;
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
 
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ADVANCED_CONFIGURATIONS;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.APPLICATION_BASED_OUTBOUND_PROVISIONING_ENABLED;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.APPLICATION_ENABLED;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.APPLICATION_MANAGEMENT_PATH_COMPONENT;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.CLIENT_ID;
+import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ENHANCED_ORGANIZATION_AUTHENTICATION_FEATURE_ENABLED;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.APPLICATION_CREATION_WITH_TEMPLATES_NOT_IMPLEMENTED;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.BLOCK_RENAME_APP_NAME_TO_RESERVED_APP_NAME;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.BLOCK_SYSTEM_RESERVED_APP_CREATION;
@@ -196,7 +189,7 @@ import static org.wso2.carbon.identity.api.server.application.management.common.
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.ERROR_PROCESSING_REQUEST;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.FORBIDDEN_OPERATION;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.INBOUND_NOT_CONFIGURED;
-import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.UNSUPPORTED_OUTBOUND_PROVISIONING_CONFIGURATION;
+import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.UNSUPPORTED_ENHANCED_ORGANIZATION_AUTHENTICATION_ENABLED_CONFIGURATION;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ErrorMessage.USE_EXTERNAL_CONSENT_PAGE_NOT_SUPPORTED;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.ISSUER;
 import static org.wso2.carbon.identity.api.server.application.management.common.ApplicationManagementConstants.NAME;
@@ -266,6 +259,8 @@ public class ServerApplicationManagementService {
     private static final String[] VALID_MEDIA_TYPES_YAML = {"application/yaml", "text/yaml", "application/x-yaml"};
     private static final String[] VALID_MEDIA_TYPES_JSON = {"application/json", "text/json"};
     private static final Class<?>[] INBOUND_CONFIG_PROTOCOLS = new Class<?>[]{ServiceProvider.class,
+            SAMLSSOServiceProviderDTO.class, OAuthAppDO.class};
+    private static final Class<?>[] ADDITIONAL_INBOUND_CONFIG_PROTOCOLS = new Class<?>[]{
             SAMLSSOServiceProviderDTO.class, OAuthAppDO.class};
 
     static {
@@ -586,90 +581,67 @@ public class ServerApplicationManagementService {
             log.debug("Generating file content from model for application: " + serviceProvider.getApplicationName());
         }
 
-        StringBuilder fileNameSB = new StringBuilder(serviceProvider.getApplicationName());
-        String fileContent;
-
-        if (Arrays.asList(VALID_MEDIA_TYPES_XML).contains(fileType)) {
-            fileContent = parseXmlFromServiceProvider(serviceProvider);
-            fileNameSB.append(XML_FILE_EXTENSION);
-        } else if (Arrays.asList(VALID_MEDIA_TYPES_YAML).contains(fileType)) {
-            fileContent = parseYamlFromServiceProvider(serviceProvider);
-            fileNameSB.append(YML_FILE_EXTENSION);
-        } else if (Arrays.asList(VALID_MEDIA_TYPES_JSON).contains(fileType)) {
-            fileContent = parseJsonFromServiceProvider(serviceProvider);
-            fileNameSB.append(JSON_FILE_EXTENSION);
-        } else {
-            throw Utils.buildServerError("Unsupported media type: " + fileType + "."
-                    + " Supported media types are " + Arrays.toString(VALID_MEDIA_TYPES_XML) + ", "
-                    + Arrays.toString(VALID_MEDIA_TYPES_YAML) + ", " + Arrays.toString(VALID_MEDIA_TYPES_JSON));
-        }
-
         try {
+            FileContent fileContent =
+                    FileSerializationUtil.serialize(
+                            serviceProvider,
+                            serviceProvider.getApplicationName(),
+                            fileType,
+                            buildSerializationConfig()
+                    );
+
             return new TransferResource(
-                    fileNameSB.toString(),
-                    fileContent.getBytes(StandardCharsets.UTF_8),
+                    fileContent.getFileName(),
+                    fileContent.getContent().getBytes(StandardCharsets.UTF_8),
                     new MimeType("application/octet-stream")
             );
+        } catch (FileSerializationException e) {
+            throw Utils.buildServerError("Error exporting application from file.", e);
         } catch (MimeTypeParseException e) {
             throw new RuntimeException("Failed to parse MIME type", e);
         }
     }
 
-    private String parseXmlFromServiceProvider(ServiceProvider serviceProvider) {
+    private FileSerializationConfig buildSerializationConfig() {
 
-        JAXBContext jaxbContext;
-        try {
-            jaxbContext = JAXBContext.newInstance(INBOUND_CONFIG_PROTOCOLS);
-            Marshaller marshaller = jaxbContext.createMarshaller();
-            marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+        FileSerializationConfig config = new FileSerializationConfig();
+
+        XmlConfig xmlConfig = new XmlConfig();
+        xmlConfig.setAdditionalJaxbClasses(ADDITIONAL_INBOUND_CONFIG_PROTOCOLS);
+        xmlConfig.setMarshallerCustomizer(marshaller -> {
             marshaller.setListener(new Marshaller.Listener() {
                 @Override
                 public void beforeMarshal(Object source) {
                     if (source instanceof InboundAuthenticationConfig) {
-                        InboundAuthenticationConfig config = (InboundAuthenticationConfig) source;
+                        InboundAuthenticationConfig authConfig = (InboundAuthenticationConfig) source;
                         for (InboundAuthenticationRequestConfig requestConfig
-                                : config.getInboundAuthenticationRequestConfigs()) {
+                                : authConfig.getInboundAuthenticationRequestConfigs()) {
                             requestConfig.setInboundConfiguration(null);
                         }
                     }
                 }
             });
-            StringWriter stringWriter = new StringWriter();
-            marshaller.marshal(serviceProvider, stringWriter);
-            return stringWriter.toString();
-        } catch (JAXBException e) {
-            throw Utils.buildServerError("Error exporting application from XML file.", e);
-        }
-    }
+        });
+        config.setXmlConfig(xmlConfig);
 
-    private String parseYamlFromServiceProvider(ServiceProvider serviceProvider) {
+        YamlConfig yamlConfig = new YamlConfig();
+        yamlConfig.setConstructorCustomizer(constructor -> {
+            for (Class<?> protocol : INBOUND_CONFIG_PROTOCOLS) {
+                TypeDescription description = new TypeDescription(InboundConfigurationProtocol.class);
+                description.addPropertyParameters("type", protocol);
+                constructor.addTypeDescription(description);
+            }
+        });
+        yamlConfig.setRepresenterFactory(CustomRepresenter::new);
+        config.setYamlConfig(yamlConfig);
 
-        Constructor constructor = new Constructor(new LoaderOptions());
-        CustomRepresenter representer = new CustomRepresenter(new DumperOptions());
+        JsonConfig jsonConfig = new JsonConfig();
+        jsonConfig.setSubtypes(INBOUND_CONFIG_PROTOCOLS);
+        config.setJsonConfig(jsonConfig);
 
-        for (Class<?> protocol : INBOUND_CONFIG_PROTOCOLS) {
-            TypeDescription description = new TypeDescription(InboundConfigurationProtocol.class);
-            description.addPropertyParameters("type", protocol);
-            constructor.addTypeDescription(description);
-        }
+        config.setSerializeDefault(FileSerializationConfig.DefaultFormat.ERROR);
 
-        Yaml yaml = new Yaml(constructor, representer);
-        try {
-            return yaml.dump(serviceProvider);
-        } catch (YAMLException e) {
-            throw Utils.buildServerError("Error exporting application from YAML file.", e);
-        }
-    }
-
-    private String parseJsonFromServiceProvider(ServiceProvider serviceProvider) {
-
-        ObjectMapper objectMapper = new ObjectMapper(new JsonFactory());
-        objectMapper.registerSubtypes(INBOUND_CONFIG_PROTOCOLS);
-        try {
-            return objectMapper.writeValueAsString(serviceProvider);
-        } catch (JsonProcessingException e) {
-            throw Utils.buildServerError("Error exporting application from JSON file.", e);
-        }
+        return config;
     }
 
     /**
@@ -758,74 +730,44 @@ public class ServerApplicationManagementService {
                     spFileContent.getFileName(), tenantDomain));
         }
 
-        if (containsValidMediaType(fileType, VALID_MEDIA_TYPES_XML)) {
-            return parseServiceProviderFromXml(spFileContent, tenantDomain);
-        } else if (containsValidMediaType(fileType, VALID_MEDIA_TYPES_YAML)) {
-            return parseServiceProviderFromYaml(spFileContent, tenantDomain);
-        } else if (containsValidMediaType(fileType, VALID_MEDIA_TYPES_JSON)) {
-            return parseServiceProviderFromJson(spFileContent, tenantDomain);
-        } else {
-            log.warn("Unsupported file type " + fileType + " for file " + spFileContent.getFileName() + " . " +
-                    "Defaulting to XML parsing");
-            return parseServiceProviderFromXml(spFileContent, tenantDomain);
-        }
-    }
-
-    private boolean containsValidMediaType(String fileType, String[] mediaTypes) {
-
-        for (String mediaType : mediaTypes) {
-            if (fileType.contains(mediaType)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private ServiceProvider parseServiceProviderFromXml(SpFileContent spFileContent, String tenantDomain)
-            throws IdentityApplicationManagementException {
-
         try {
-            JAXBContext jaxbContext = JAXBContext.newInstance(INBOUND_CONFIG_PROTOCOLS);
-            Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-            return (ServiceProvider) unmarshaller.unmarshal(new StringReader(spFileContent.getContent()));
-        } catch (JAXBException e) {
-            throw new IdentityApplicationManagementException(String.format("Error in reading XML Service Provider " +
+            FileContent fileContent =
+                    new FileContent(
+                            spFileContent.getFileName(),
+                            fileType,
+                            spFileContent.getContent()
+                    );
+
+            return FileSerializationUtil.deserialize(
+                    fileContent,
+                    ServiceProvider.class,
+                    buildDeserializationConfig()
+            );
+        } catch (FileSerializationException e) {
+            throw new IdentityApplicationManagementException(String.format("Error in reading Service Provider " +
                     "configuration file %s uploaded by tenant: %s", spFileContent.getFileName(), tenantDomain), e);
         }
     }
 
-    private ServiceProvider parseServiceProviderFromYaml(SpFileContent spFileContent, String tenantDomain)
-            throws IdentityApplicationManagementException {
+    private FileSerializationConfig buildDeserializationConfig() {
 
-        try {
-            // Add trusted tags included in the SP YAML file.
-            List<String> trustedTagList = new ArrayList<>();
-            trustedTagList.add(ServiceProvider.class.getName());
-            trustedTagList.add(OAuthAppDO.class.getName());
-            trustedTagList.add(SAMLSSOServiceProviderDTO.class.getName());
+        FileSerializationConfig config = new FileSerializationConfig();
 
-            LoaderOptions loaderOptions = new LoaderOptions();
-            TagInspector tagInspector = new TrustedPrefixesTagInspector(trustedTagList);
-            loaderOptions.setTagInspector(tagInspector);
-            Yaml yaml = new Yaml(new Constructor(ServiceProvider.class, loaderOptions));
-            return yaml.loadAs(spFileContent.getContent(), ServiceProvider.class);
-        } catch (YAMLException e) {
-            throw new IdentityApplicationManagementException(String.format("Error in reading YAML Service Provider " +
-                    "configuration file %s uploaded by tenant: %s", spFileContent.getFileName(), tenantDomain), e);
-        }
-    }
+        XmlConfig xmlConfig = new XmlConfig();
+        xmlConfig.setAdditionalJaxbClasses(ADDITIONAL_INBOUND_CONFIG_PROTOCOLS);
+        config.setXmlConfig(xmlConfig);
 
-    private ServiceProvider parseServiceProviderFromJson(SpFileContent spFileContent, String tenantDomain)
-            throws IdentityApplicationManagementException {
+        YamlConfig yamlConfig = new YamlConfig();
+        yamlConfig.setAdditionalTrustedClasses(OAuthAppDO.class, SAMLSSOServiceProviderDTO.class);
+        config.setYamlConfig(yamlConfig);
 
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            objectMapper.registerSubtypes(INBOUND_CONFIG_PROTOCOLS);
-            return objectMapper.readValue(spFileContent.getContent(), ServiceProvider.class);
-        } catch (JsonProcessingException e) {
-            throw new IdentityApplicationManagementException(String.format("Error in reading JSON Service Provider " +
-                    "configuration file %s uploaded by tenant: %s", spFileContent.getFileName(), tenantDomain), e);
-        }
+        JsonConfig jsonConfig = new JsonConfig();
+        jsonConfig.setSubtypes(INBOUND_CONFIG_PROTOCOLS);
+        config.setJsonConfig(jsonConfig);
+
+        config.setDeserializeDefault(FileSerializationConfig.DefaultFormat.XML);
+
+        return config;
     }
 
     private SpFileContent buildSpFileContent(InputStream fileInputStream, Attachment fileDetail) throws IOException {
@@ -889,12 +831,10 @@ public class ServerApplicationManagementService {
             }
         }
 
-        // Validate whether application-based outbound provisioning support is enabled.
-        if (applicationModel.getProvisioningConfigurations() != null &&
-                applicationModel.getProvisioningConfigurations().getOutboundProvisioningIdps() != null &&
-                !isApplicationBasedOutboundProvisioningEnabled()) {
-            throw buildBadRequestError(UNSUPPORTED_OUTBOUND_PROVISIONING_CONFIGURATION.getCode(),
-                    UNSUPPORTED_OUTBOUND_PROVISIONING_CONFIGURATION.getDescription());
+        if (!isEnhancedOrganizationAuthenticationFeatureEnabled() &&
+                Boolean.TRUE.equals(applicationModel.getEnhancedOrgAuthenticationEnabled())) {
+            throw buildBadRequestError(UNSUPPORTED_ENHANCED_ORGANIZATION_AUTHENTICATION_ENABLED_CONFIGURATION.getCode(),
+                    UNSUPPORTED_ENHANCED_ORGANIZATION_AUTHENTICATION_ENABLED_CONFIGURATION.getDescription());
         }
 
         // Block application creation with name Console or MyAccount.
@@ -958,6 +898,13 @@ public class ServerApplicationManagementService {
     public void patchApplication(String applicationId, ApplicationPatchModel applicationPatchModel) {
 
         ServiceProvider appToUpdate = cloneApplication(applicationId);
+
+        if (!isEnhancedOrganizationAuthenticationFeatureEnabled() && applicationPatchModel != null &&
+                Boolean.TRUE.equals(applicationPatchModel.getEnhancedOrgAuthenticationEnabled())) {
+            throw buildBadRequestError(UNSUPPORTED_ENHANCED_ORGANIZATION_AUTHENTICATION_ENABLED_CONFIGURATION.getCode(),
+                    UNSUPPORTED_ENHANCED_ORGANIZATION_AUTHENTICATION_ENABLED_CONFIGURATION.getDescription());
+        }
+
         /*
          * Updating the adaptive script requires the internal_application_script_update scope.
          * Validate the permission before allowing the update.
@@ -971,14 +918,6 @@ public class ServerApplicationManagementService {
         }
         if (!isLegacyAuthzRuntime()) {
             restrictRoleAssociationUpdateInOrgAudience(applicationId, applicationPatchModel);
-        }
-
-        // Validate whether application-based outbound provisioning support is enabled.
-        if (applicationPatchModel != null && applicationPatchModel.getProvisioningConfigurations() != null &&
-                applicationPatchModel.getProvisioningConfigurations().getOutboundProvisioningIdps() != null &&
-                !isApplicationBasedOutboundProvisioningEnabled()) {
-            throw buildBadRequestError(UNSUPPORTED_OUTBOUND_PROVISIONING_CONFIGURATION.getCode(),
-                    UNSUPPORTED_OUTBOUND_PROVISIONING_CONFIGURATION.getDescription());
         }
 
         if (applicationPatchModel != null) {
@@ -2352,6 +2291,17 @@ public class ServerApplicationManagementService {
                     .parseBoolean(IdentityUtil.getProperty(APPLICATION_BASED_OUTBOUND_PROVISIONING_ENABLED));
         }
         return applicationBasedOutboundProvisioningEnabled;
+    }
+
+    private boolean isEnhancedOrganizationAuthenticationFeatureEnabled() {
+
+        boolean enhancedOrganizationAuthenticationEnabled = false;
+        if (StringUtils.isNotEmpty(
+                IdentityUtil.getProperty(ENHANCED_ORGANIZATION_AUTHENTICATION_FEATURE_ENABLED))) {
+            enhancedOrganizationAuthenticationEnabled = Boolean
+                    .parseBoolean(IdentityUtil.getProperty(ENHANCED_ORGANIZATION_AUTHENTICATION_FEATURE_ENABLED));
+        }
+        return enhancedOrganizationAuthenticationEnabled;
     }
 
     private void blockRenameAppsToSystemReservedApps(String newAppName, String oldAppName) {

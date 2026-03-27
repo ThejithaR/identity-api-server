@@ -3136,6 +3136,9 @@ components:
         associatedRoles:
           type: object
           $ref: '#/components/schemas/AssociatedRolesConfig'
+        enhancedOrgAuthenticationEnabled:
+          type: boolean
+          example: false
         applicationEnabled:
           type: boolean
           example: true
@@ -3180,6 +3183,10 @@ components:
           type: boolean
           example: false
           description: Decides whether the application used to for B2B self service
+        enhancedOrgAuthenticationEnabled:
+          type: boolean
+          example: false
+          description: Decides whether the enhanced organization authentication is enabled for the application.
         applicationEnabled:
           default: true
           type: boolean
@@ -3248,6 +3255,10 @@ components:
           type: boolean
           example: false
           description: Decides whether the application used to for B2B self service
+        enhancedOrgAuthenticationEnabled:
+          type: boolean
+          example: false
+          description: Decides whether the enhanced organization authentication is enabled for the application.
         applicationEnabled:
           type: boolean
           example: true
@@ -3298,6 +3309,10 @@ components:
           type: string
           example: "v1.0.1"
           description: Version of the template used to create the application.
+        enhancedOrgAuthenticationEnabled:
+          type: boolean
+          example: false
+          description: Decides whether the enhanced organization authentication is enabled for the application.
         applicationEnabled:
           type: boolean
           example: true
@@ -3962,6 +3977,10 @@ components:
           default: false
           description: Enabling this option will make the application FAPI conformant.
           example: false
+        cibaAuthenticationRequest:
+          $ref: '#/components/schemas/CIBAAuthenticationRequestConfiguration'
+        issuer:
+          $ref: '#/components/schemas/AllowedIssuer'
     OAuth2PKCEConfiguration:
       type: object
       properties:
@@ -4015,6 +4034,9 @@ components:
           type: array
           items:
             type: string
+        enableJwtScopeAsArray:
+          type: boolean
+          description: If enabled, the scope claim in JWT access tokens will be formatted as a JSON array.
     RefreshTokenConfiguration:
       type: object
       properties:
@@ -4275,6 +4297,43 @@ components:
           $ref: '#/components/schemas/MetadataProperty'
         tokenEndpointAuthMethod:
           $ref: '#/components/schemas/ClientAuthenticationMethodMetadata'
+    CIBAMetadata:
+      type: object
+      properties:
+        supportedNotificationChannels:
+          type: array
+          items:
+            $ref: '#/components/schemas/CIBANotificationChannel'
+    CIBANotificationChannel:
+      type: object
+      properties:
+        name:
+          type: string
+          example: email
+        displayName:
+          type: string
+          example: Email
+    AllowedIssuers:
+      type: array
+      items:
+        $ref: '#/components/schemas/AllowedIssuer'
+    AllowedIssuer:
+      type: object
+      properties:
+        value:
+          type: string
+          readOnly: true
+          description: Issuer detail that can be used for tokens.
+          example: "https://localhost:9443/oauth2/token"
+        organizationId:
+          type: string
+          description: Organization ID of the allowed issuer.
+          example: "bdece142-646b-45c0-9385-a4159f1ea219"
+        tenantDomain:
+          type: string
+          readOnly: true
+          description: Tenant domain of the allowed issuer.
+          example: "wso2.com"
     ClientAuthenticationMethod:
       type: object
       properties:
@@ -4365,6 +4424,10 @@ components:
           $ref: '#/components/schemas/MetadataProperty'
         fapiMetadata:
           $ref: '#/components/schemas/FapiMetadata'
+        cibaMetadata:
+          $ref: '#/components/schemas/CIBAMetadata'
+        allowedIssuers:
+          $ref: '#/components/schemas/AllowedIssuers'
     WSTrustMetaData:
       type: object
       properties:
@@ -4993,6 +5056,32 @@ components:
             - For IN_PROGRESS status, an empty JSON object is returned.
             - For COMPLETED status, the authentication sequence is returned.
             - For FAILED status, an error message is returned.
+    CIBAAuthenticationRequestConfiguration:
+      type: object
+      properties:
+        authReqExpiryTime:
+          type: integer
+          format: int64
+          description: "CIBA authentication request expiry time in seconds."
+          example: 600
+        notificationChannels:
+          type: array
+          items:
+            type: string
+          description: "List of allowed notification channels."
+          example:
+            - "email"
+            - "sms"
+        skipUserValidation:
+          type: boolean
+          description: "Skip validation that the authenticated user matches the resolved user from login_hint during token issuance."
+          default: false
+          example: false
+        allowFederatedUsers:
+          type: boolean
+          description: "Allow sending CIBA notifications to users not found in the local user store. When enabled, the notification is sent directly to the login_hint value using the notification_channel to determine if it is an email or phone number. Requires skipUserValidation to be enabled."
+          default: false
+          example: false
 servers:
   - url: 'https://{server-url}/t/{tenant-domain}/api/server/v1'
     variables:
